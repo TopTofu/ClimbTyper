@@ -1,5 +1,7 @@
 #include <glad/glad.h>
 #include <iostream>
+#include <glm/glm.hpp>
+#include <queue>
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -8,25 +10,26 @@
 #include "Render.h"
 #include "Font.h"
 #include "Shader.h"
-
+#include "Camera.h"
+#include "Source/Variables.cpp"
+#include <Wall.h>
+#include "Climber.h"
 
 int main() {
 
-	GLFWwindow* window = initWindow(1200, 1000);
-	initOpenGL(window, 1200, 1000);
+	GLFWwindow* window = initWindow(WINDOW_WIDTH, WINDOW_HEIGHT);
+	initOpenGL(window, WINDOW_WIDTH, WINDOW_HEIGHT);
 
 	GLuint texture = loadFontFileIntoTexture("E:/ClimbTyper/Resources/fontAtlasBig.png");
-	
 
 	GLuint vertex = compileShader("E:/ClimbTyper/Resources/Shader/default.vert");
 	GLuint fragment = compileShader("E:/ClimbTyper/Resources/Shader/default.frag");
 
-	GLuint program = createProgram(vertex, fragment);
+	GLuint shader = createProgram(vertex, fragment);
 
-	glUseProgram(program);
-	//glUniform1i(glGetUniformLocation(program, "Texture"), 0);
+	glUseProgram(shader);
 
-	std::map<char, GLuint> allKeyQuads = {
+	const std::map<char, GLuint> allKeyQuads = {
 		{'A', bufferKeyQuad('A')},
 		{'B', bufferKeyQuad('B')},
 		{'C', bufferKeyQuad('C')},
@@ -54,43 +57,74 @@ int main() {
 		{'Y', bufferKeyQuad('Y')},
 		{'Z', bufferKeyQuad('Z')},
 	};
-	
-
-	KeyBuffer buffer = initBuffer(10);
-	GLuint vao = bufferKeyQuad(buffer.queue[0]);
-
-	int peekSize = 5;
-	std::vector<char> next = peekKeys(buffer, peekSize);
 
 	int score = 0;
 	int hp = 3;
-	
+
 	char lastKey = 0;
+	int frameCount = 0;
+
+	glm::vec3 initalCamPos = glm::vec3{ 0.0f, 0.45f, 1.0f };
+	Camera c = initCamera(initalCamPos);
+
+	Wall wall = initWall();
+
+	Climber climber = initClimber(glm::vec3(0.0f, 0.6f, 0.0f));
+	findStartingPos(climber, wall);
 
 	while (!glfwWindowShouldClose(window)) {
-		char keyStroke = getKeyStroke(window);
+		frameCount++;
 
-		if (glfwGetKey(window, lastKey) != GLFW_PRESS) {
-			processKeyStroke(buffer, keyStroke, score, hp);
-			next = peekKeys(buffer, peekSize);
-		
-			if (hp <= 0) {
+		glClearColor(10 / 255.0f, 57 / 255.0f, 47 / 255.0f, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		{
+			char keyStroke = getKeyStroke(window);
+
+			if (glfwGetKey(window, lastKey) != GLFW_PRESS) {
+				if (processKeyStroke(wall, climber, keyStroke, score, hp)) {
+					printf("Score: %i\n", score);
+					//c.position.y += 0.1f;
+				}
+			}
+			lastKey = keyStroke;
+
+			/*if (hp <= 0) {
 				std::cout << "Game Over" << "\n";
 				std::cout << "Final Score: " << score << "\n";
 				break;
-			}
+			}*/
 		}
 
-		lastKey = keyStroke;
 
-		glClearColor(0.07f, 0.13f, 0.17f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+			c.position = initalCamPos;
+			wall = initWall();
+			resetClimberPos(climber);
+			findStartingPos(climber, wall);
+		}
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, texture);
-		
-		renderKeyQuad(program, allKeyQuads[next[0]]);
-		
+		/*if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+			balanceClimberBody(climber);
+		}*/
+
+		if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+			c.position.y += -0.001f;
+		}
+		if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+			c.position.y += 0.001f;
+		}
+		if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+			c.position.x += 0.001f;
+		}
+		if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+			c.position.x -= 0.001f;
+		}
+
+		renderWall(wall, shader, allKeyQuads, texture, c);
+
+		renderClimber(climber, shader, c);
+
 		glfwSwapBuffers(window);
 
 		glfwPollEvents();
@@ -100,46 +134,4 @@ int main() {
 	glfwTerminate();
 
 	return 0;
-
-
-	/*int score = 0;
-	int hp = 3;
-
-	KeyBuffer buffer = initBuffer(10);
-
-	int preSize = 5;
-	std::vector<char> next = peekKeys(buffer, preSize);
-
-	while (true) {
-		for (int i = 0; i < size(next); i++) {
-			if (i != size(next) - 1) {
-				std::cout << next[i] << "  >>  ";
-			}
-			else {
-				std::cout << next[i] << "\n";
-			}
-		}
-
-		char keyStroke;
-		std::cin >> keyStroke;
-
-		if (processKeyStroke(buffer, keyStroke)) {
-			score++;
-			next = peekKeys(buffer, preSize);
-		}
-		else {
-			hp--;
-			std::cout << "Wrong" << "\n";
-		}
-
-		if (hp <= 0) {
-			std::cout << "Game Over" << "\n";
-			std::cout << "Final Score: " << score << "\n";
-			break;
-		}
-	}
-
-	std::cout << "Press Any Key To Close" << "\n";
-	char p;
-	std::cin >> p;*/
 }
